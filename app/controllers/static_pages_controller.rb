@@ -1,3 +1,5 @@
+# TEMP: need this?
+require 'discuss_it'
 
 class StaticPagesController < ApplicationController
   def index
@@ -17,7 +19,7 @@ class StaticPagesController < ApplicationController
 
       @all_results = @discussit.find_all
       @top_results = @discussit.find_top
-    rescue DiscussItUrlError => e
+    rescue DiscussIt::UrlError => e
       redirect_to :root, :flash => { :error => 'Invalid URL' }
     end
   end

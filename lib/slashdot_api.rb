@@ -21,28 +21,7 @@ class SlashdotApi
 # finds or creates Url objects from each permalink-body's anchors
 #----------------------------------------------------------------------
 
-  # enable verbose output for debugging, etc
-  VERBOSE = true
-
   def initialize
-  end
-
-  # if VERBOSE = true, displays output and colorizes it.
-  def display(message, color=:undef)
-    if VERBOSE == true
-      # colorize the output, baby
-      colorize = {
-        :black  => lambda { |text| "\033[30m#{text}\033[0m" },
-        :red    => lambda { |text| "\033[31m#{text}\033[0m" },
-        :green  => lambda { |text| "\033[32m#{text}\033[0m" },
-        :yellow => lambda { |text| "\033[33m#{text}\033[0m" },
-        :white  => lambda { |text| "\033[37m#{text}\033[0m" },
-        :blue   => lambda { |text| "\033[34m#{text}\033[0m" },
-        :undef  => lambda { |text| "#{text}"                }
-      }
-
-      puts colorize[color].call(message)
-    end
   end
 
   def get_postings(timeframe='w')
@@ -60,18 +39,16 @@ class SlashdotApi
     request_count ||= -2
 
     response = HTTParty::get(archive_url)
-    display "Response fetched...", :green
     doc = Nokogiri::HTML(response.body)
-    display "Response parsed...", :green
-    parent_body_anchors = []
 
     # array of slashdot posting urls from archive page
     archived_postings = doc.css('div.grid_24 a')[first_anchor..request_count]
 
     # counter for rake-task display of progress percentage
     archived_count = archived_postings.length
-    display "Fetching #{archived_count} results..."
+    puts "Fetching #{archived_count} results..."
 
+    parent_body_anchors = []
     archived_postings.each { |anchor| parent_body_anchors << anchor.attribute("href").to_s }
 
     # go through each posting on archive page, traverse HTML,
@@ -81,21 +58,21 @@ class SlashdotApi
       posting_urls = []
 
       # find/init SlashdotPosting.new instance from each posting_url
-      s = SlashdotPosting.find_or_initialize_by_permalink(permalink)
-      if s.new_record?
+      s = SlashdotPosting.find_by(permalink: permalink)
+
+      if s.blank?
 
         # open each slashdot discussion link as 'posting'
         posting = HTTParty::get(permalink)
-        document = Nokogiri::HTML(posting)
-        display "\nscanning #{anchor}", :yellow
 
-        # FIXME: should we include slashdot links?
-        # if not, have a more accurate RegEx exclusion (only domain, not just keyword)
-        #
+
+        def parse(posting)
+          @document = Nokogiri::HTML(posting)
+        end
+
+        parse(posting)
         # builds posting_url array with relevant body anchors that aren't slashdot
-        document.css('div.body a').each do |body_anchor|
-        # FIXME: if slashdot discussions work alright, delete this
-        # document.css('div.body a:not([href*="slashdot"])').each do |body_anchor|
+        @document.css('div.body a').each do |body_anchor|
           body_url = body_anchor.attribute("href").to_s
           posting_urls << body_url
         end
@@ -103,30 +80,40 @@ class SlashdotApi
         # dont bother creating a listing if no links; i.e. "Ask Slashdot" posts
         unless posting_urls.empty?
 
-          title           = document.css('title').text
-          author          = document.css('header div.details a').text
-          comment_count   = document.css('span.totalcommentcnt').first.text
-          # FIXME: parse date into something useable, currently "on Sunday July 21, 2013 @01:51PM"
-          post_date       = document.css('header div.details time').text
+          def title
+            return @document.css('title').text
+          end
+
+          def author
+            return @document.css('header div.details a').text
+          end
+
+          def comment_count
+            return @document.css('span.totalcommentcnt').first.text
+          end
+
+          def post_date
+            # FIXME: parse date into something useable, currently "on Sunday July 21, 2013 @01:51PM"
+            return @document.css('header div.details time').text
+          end
+
+          s = SlashdotPosting.new
 
           s.site          = "slashdot"
           s.permalink     = permalink
           s.title         = title
           s.author        = author
           s.comment_count = comment_count
-          s.post_date = post_date
+          s.post_date     = post_date
 
-          # verbose output and progress percentage
-          print "(#{(index.to_f/archived_count*100).round(1)}% done)  "
-          display "Saving SlashdotPosting for '#{s.title}'...", :green
           s.save
 
           # find/init Url.new instance from each url in posting's body
           # and associate with SlashdotPosting instance
           posting_urls.each do |url|
-            u = Url.find_or_initialize_by_target_url(url)
+            u = Url.find_or_initialize_by(target_url: url)
             u.slashdot_postings << SlashdotPosting.find_or_initialize_by_permalink(s.permalink)
-            display ">  Saving associated URL: '#{url}'.", :green
+            puts ">  Saving associated URL: '#{url}'."
             u.save
           end
         end
@@ -135,3 +122,87 @@ class SlashdotApi
   end
 
 end
+
+########################
+#----------------------------------------------------------------------
+# initialization is blank? probably
+# MODEL FETCHER METHODS AFTER RAKE TASKS -- TASK SHOULD CALL SINGLE METHOD
+# get_postings() takes a count
+# get_latest()
+########################
+
+
+module Slashdot
+
+    # 1 - get http response
+    # 2 - parse http response
+    # 3 - get relevant part of response, composed of posting_anchors
+    # 4 - create listing from each posting_anchors
+    #
+    # 5 - get http response of posting_anchor
+    # 6 - parse http response of posting_anchor
+    # 7 - get body anchors of posting
+    # 8 - create url from each body anchor in posting
+
+  #------
+
+  class Fetcher
+
+  end
+
+  #------
+
+  class Parser
+    # builds url array
+    def count_chocula(nokogiri_doc)
+      nokogiri_doc.css('div.body a').each do |body_anchor|
+        body_url = body_anchor.attribute("href").to_s
+        posting_urls << body_url
+      end
+    end
+
+
+    def parse(posting)
+      # open each slashdot discussion link as 'posting'
+      @document = Nokogiri::HTML(posting)
+    end
+
+  end
+
+  #------
+
+  class Builder
+    # creates 2 things:
+    # - slashdot_postings
+    # - urls
+
+    def build_posting(permalink)
+      # find/init SlashdotPosting.new instance from each posting_url
+      s = SlashdotPosting.find_or_initialize_by_permalink(permalink)
+      if s.new_record?
+        #help
+      end
+    end
+
+    # builds single url and associates with slashdot postings
+    def build_url(url, permalink)
+      u = Url.find_or_initialize_by_target_url(url)
+      u.slashdot_postings << SlashdotPosting.find_or_initialize_by_permalink(permalink)
+      u.save
+    end
+
+  end
+
+  #------
+
+  class Validator
+    # validates candidacy of posting or url buildage
+    def has_urls?(permalink)
+      #
+    end
+  end
+
+
+end
+
+

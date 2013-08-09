@@ -7,25 +7,7 @@
 # http://github.com/theoretick/discussit
 #----------------------------------------------------------------------
 require 'json'
-
-#----------------------------------------------------------------------
-# Exception class to catch invalid URL Errors
-#----------------------------------------------------------------------
-class DiscussItUrlError < Exception; end
-
-
-#----------------------------------------------------------------------
-# FIXME: should this have a more general name?
-# Exception class to catch Timeouts and general HTTP Errors
-#----------------------------------------------------------------------
-class DiscussItTimeoutError < Exception; end
-
-
-#----------------------------------------------------------------------
-# Exception class to catch Timeouts and general HTTP Errors
-#----------------------------------------------------------------------
-class DiscussItUnknownError < Exception; end
-
+require 'discuss_it/exceptions'
 
 #----------------------------------------------------------------------
 # Formats url, gets response and returns parsed json
@@ -34,13 +16,14 @@ class DiscussItUnknownError < Exception; end
 class Fetch
   include HTTParty
 
-  # FIXME: is this long enough? too long?
   # Sets lower timeout for HTTParty
-  # default_timeout 6
+  # TEMP: test the timeout in staging/production
+  default_timeout 6
 
   # returns ruby hash of parsed json object
   # TODO: currently only JSON, possible XML for future
-  def self.parse(response)
+  # TEMP: added secondary param
+  def self.parse(response, type='json')
     begin
       return JSON.parse(response)
     # rescue for nil response parsing
@@ -60,12 +43,12 @@ class Fetch
   def self.get_response(api_url, query_string)
     begin
       query_url = ensure_http(query_string)
-      response = get(api_url + query_url, :headers => {"User-Agent" => "DiscussIt API by limitlesschannels"})
+      response = get(api_url + query_url, :headers => {"User-Agent" => "DiscussItAPI at github.com/discuss-it"})
       return self.parse(response.body)
 
     # if http://xxx is still invalid url content, raise error
     rescue URI::InvalidURIError => e
-      raise DiscussItUrlError.new # catch in controller
+      raise DiscussIt::UrlError.new # catch in controller
     # if HTTP timeout or general HTTP error, don't break everything
     rescue  Timeout::Error,
             Errno::EINVAL,
@@ -74,7 +57,7 @@ class Fetch
             Net::HTTPBadResponse,
             Net::HTTPHeaderSyntaxError,
             Net::ProtocolError => e
-      raise DiscussItTimeoutError.new
+      raise DiscussIt::TimeoutError.new
     end
 
   end
@@ -104,7 +87,7 @@ class RedditFetch
     begin
       reddit_raw_a = Fetch.get_response(api_url, query_url)
       @raw_master = pull_out(reddit_raw_a)
-    rescue DiscussItTimeoutError => e
+    rescue DiscussIt::TimeoutError => e
       # FIXME: add status code for e homepage display 'reddit down'
       @raw_master = []
     end
@@ -114,7 +97,7 @@ class RedditFetch
       reddit_raw_b = Fetch.get_response(api_url, query_url + '/')
       # sets master hash of both combined API calls
       @raw_master += pull_out(reddit_raw_b)
-    rescue DiscussItTimeoutError => e
+    rescue DiscussIt::TimeoutError => e
       # FIXME: add status code for e homepage display 'reddit down'
       @raw_master += []
     end
@@ -175,7 +158,7 @@ class HnFetch
     begin
       hn_raw = Fetch.get_response(api_url, query_url + '/')
       @raw_master = pull_out(hn_raw)
-    rescue DiscussItTimeoutError => e
+    rescue DiscussIt::TimeoutError => e
       # FIXME: add status code for e homepage display 'hn down'
       @raw_master = []
     end
@@ -227,7 +210,7 @@ class SlashdotFetch
     begin
       slashdot_raw = Fetch.get_response(api_url, query_string)
       @raw_master = slashdot_raw
-    rescue DiscussItTimeoutError => e
+    rescue DiscussIt::TimeoutError => e
       # FIXME: add status code for e homepage display 'slashdot down'
       @raw_master = []
     end
