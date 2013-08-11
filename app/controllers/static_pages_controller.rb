@@ -10,6 +10,7 @@ class StaticPagesController < ApplicationController
       @query_text = params[:query]
       @api_version = '2'
 
+      # TODO: shouldn't need to explicitly set this
       # Defaults to APIv2. 'beta' version uses latest (slashdot)
       if (params[:commit] == '(Beta) Search') || (params[:version] == '3')
         @api_version = '3'

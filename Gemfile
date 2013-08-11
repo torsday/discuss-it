@@ -24,6 +24,7 @@ group :development, :test do
   gem 'rspec-rails'
   gem 'guard-rspec', :require => false
   gem 'guard-spork', :require => false
+  gem 'guard-bundler', :require => false
   gem 'foreman'
 end
 
